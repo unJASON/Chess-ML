@@ -167,7 +167,7 @@ class MCTS(object):
     def __str__(self):
         return "MCTS"
 
-
+#基于MCTS+model的AI
 class MCTSPlayer(object):
     """AI player based on MCTS"""
 
