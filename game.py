@@ -61,8 +61,12 @@ class Board(object):
         square_state = np.zeros((4, self.width, self.height))
         if self.states:
             moves, players = np.array(list(zip(*self.states.items())))
+            # print(moves)
+            # print(players)
             move_curr = moves[players == self.current_player]
             move_oppo = moves[players != self.current_player]
+            # print(move_curr)
+            # print(move_oppo)
             square_state[0][move_curr // self.width,
                             move_curr % self.height] = 1.0
             square_state[1][move_oppo // self.width,

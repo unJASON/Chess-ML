@@ -101,7 +101,8 @@ class PolicyValueNet():
         # Initialize variables
         init = tf.global_variables_initializer()
         self.session.run(init)
-        writer = tf.summary.FileWriter('logs/', self.session.graph)
+        #查看模型状态
+        # writer = tf.summary.FileWriter('logs/', self.session.graph)
 
         # For saving and restoring
         self.saver = tf.train.Saver()
