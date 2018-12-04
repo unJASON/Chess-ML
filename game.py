@@ -86,6 +86,49 @@ class Board(object):
             else self.players[1]
         )
         self.last_move = move
+    def piecesCount(self,border,states,x,y,player, pieces_count, x1, y1):
+        for i in range(1, self.n_in_row):
+            new_x = x + x1*i
+            new_y = y + y1*i
+            #在边界内部
+            if new_x < border and new_y < border and new_x >=0 and new_y >=0:
+                if states.__contains__(new_x*border+new_y) and states[new_x*border+new_y] == player:
+                    pieces_count +=1
+                else:
+                    break
+            else:
+                break
+        return pieces_count
+
+    def coorJudge(self,border,x,y,player, states):
+
+        pieces_count = 0
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, 1, 0)  # 右边
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, -1, 0)  # 左边
+        if pieces_count >= self.n_in_row - 1:
+            return True
+
+        pieces_count = 0
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, 0, -1)  # 上边
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, 0, 1)  # 下边
+        if pieces_count >= self.n_in_row - 1:
+            return True
+
+        pieces_count = 0
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, 1, 1)  # 右下角
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, -1, -1)  # 左上角
+        if pieces_count >= self.n_in_row - 1:
+            return True
+
+        pieces_count = 0
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, 1, -1)  # 右上角
+        pieces_count = self.piecesCount(border,states,x,y,player, pieces_count, -1, 1)  # 左下角
+        if pieces_count >= self.n_in_row - 1:
+            return True
+
+        return False
+
+
 
     def has_a_winner(self):
         width = self.width
@@ -96,32 +139,42 @@ class Board(object):
         moved = list(set(range(width * height)) - set(self.availables))
         if len(moved) < self.n_in_row + 2:
             return False, -1
-
-        for m in moved:
-            h = m // width
-            w = m % width
-            player = states[m]
-
-            if (w in range(width - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n))) == 1):
-                return True, player
-
-            if (h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * width, width))) == 1):
-                return True, player
-
-            if (w in range(width - n + 1) and h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * (width + 1), width + 1))) == 1):
-                return True, player
-
-            if (w in range(n - 1, width) and h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * (width - 1), width - 1))) == 1):
-                return True, player
-
+        width = self.width
+        states = self.states
+        m = self.last_move
+        x = m // width
+        y = m % width
+        player = states[m]
+        if self.coorJudge(width,x,y,player,states):
+            return True,player
         return False, -1
+
+        # for m in moved:
+        #     h = m // width
+        #     w = m % width
+        #     player = states[m]
+        #
+        #     if (w in range(width - n + 1) and
+        #             len(set(states.get(i, -1) for i in range(m, m + n))) == 1):
+        #         return True, player
+        #
+        #     if (h in range(height - n + 1) and
+        #             len(set(states.get(i, -1) for i in range(m, m + n * width, width))) == 1):
+        #         return True, player
+        #
+        #     if (w in range(width - n + 1) and h in range(height - n + 1) and
+        #             len(set(states.get(i, -1) for i in range(m, m + n * (width + 1), width + 1))) == 1):
+        #         return True, player
+        #
+        #     if (w in range(n - 1, width) and h in range(height - n + 1) and
+        #             len(set(states.get(i, -1) for i in range(m, m + n * (width - 1), width - 1))) == 1):
+        #         return True, player
+        # return False, -1
 
     def game_end(self):
         """Check whether the game is ended or not"""
+        if self.last_move == -1:
+            return False, -1
         win, winner = self.has_a_winner()
         if win:
             return True, winner
@@ -172,6 +225,7 @@ class Game(object):
         player2.set_player_ind(p2)
         players = {p1: player1, p2: player2}
         if is_shown:
+        # if True:
             self.graphic(self.board, player1.player, player2.player)
         while True:
             current_player = self.board.get_current_player()
@@ -179,6 +233,7 @@ class Game(object):
             move = player_in_turn.get_action(self.board)
             self.board.do_move(move)
             if is_shown:
+            # if True:
                 self.graphic(self.board, player1.player, player2.player)
             end, winner = self.board.game_end()
             if end:
@@ -223,3 +278,24 @@ class Game(object):
                     else:
                         print("Game end. Tie")
                 return winner, zip(states, mcts_probs, winners_z)
+if __name__ == '__main__':
+    board_width = 15
+    board_height = 15
+    n_in_row = 5
+    board = Board(width=board_width,
+                       height=board_height,
+                       n_in_row=n_in_row)
+    game = Game(board)
+
+    board.init_board()
+    board.do_move(0)
+    board.do_move(5)
+    board.do_move(1)
+    board.do_move(6)
+    board.do_move(2)
+    board.do_move(7)
+    board.do_move(3)
+    board.do_move(8)
+    board.do_move(4)
+    print(board.has_a_winner())
+    print(game.graphic(game.board,1,2))
