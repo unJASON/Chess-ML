@@ -36,12 +36,12 @@ class TrainPipeline():
         self.play_batch_size = 1
         self.epochs = 5  # num of train_steps for each update
         self.kl_targ = 0.02
-        self.check_freq = 200
-        self.game_batch_num = 1500
+        self.check_freq = 100
+        self.game_batch_num = 1000
         self.best_win_ratio = 0.0
         # num of simulations used for the pure mcts, which is used as
         # the opponent to evaluate the trained policy
-        self.pure_mcts_playout_num = 1000
+        self.pure_mcts_playout_num = 3000
         if init_model:
             # start training from an initial policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
@@ -179,7 +179,7 @@ class TrainPipeline():
                         # update the best_policy
                         self.policy_value_net.save_model('./best_policy.model')
                         if (self.best_win_ratio == 1.0 and
-                                self.pure_mcts_playout_num < 5000):
+                                self.pure_mcts_playout_num < 50000):
                             self.pure_mcts_playout_num += 1000
                             self.best_win_ratio = 0.0
         except KeyboardInterrupt:
@@ -226,5 +226,5 @@ class TrainPipeline():
             self.data_buffer.extend(play_data)
 
 if __name__ == '__main__':
-    training_pipeline = TrainPipeline()
+    training_pipeline = TrainPipeline(init_model='./best_policy.model')
     training_pipeline.run15()
