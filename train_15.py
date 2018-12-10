@@ -28,7 +28,7 @@ class TrainPipeline():
         self.learn_rate = 2e-3
         self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
         self.temp = 1.0  # the temperature param
-        self.n_playout = 400  # num of simulations for each move
+        self.n_playout = 800  # num of simulations for each move
         self.c_puct = 5
         self.buffer_size = 10000
         self.batch_size = 512  # mini-batch size for training
@@ -36,12 +36,12 @@ class TrainPipeline():
         self.play_batch_size = 1
         self.epochs = 5  # num of train_steps for each update
         self.kl_targ = 0.02
-        self.check_freq = 100
-        self.game_batch_num = 1000
+        self.check_freq = 500
+        self.game_batch_num = 3000
         self.best_win_ratio = 0.0
         # num of simulations used for the pure mcts, which is used as
         # the opponent to evaluate the trained policy
-        self.pure_mcts_playout_num = 3000
+        self.pure_mcts_playout_num = 8000
         if init_model:
             # start training from an initial policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
@@ -202,12 +202,13 @@ class TrainPipeline():
                     win_ratio = self.policy_evaluate()
                     self.policy_value_net.save_model('./current_policy.model')
                     if win_ratio > self.best_win_ratio:
-                        print("New best policy!!!!!!!!")
                         self.best_win_ratio = win_ratio
+                        print("New best policy!!!!!!!! best_win_ratio:"+str(self.best_win_ratio))
                         # update the best_policy
                         self.policy_value_net.save_model('./best_policy.model')
                         if (self.best_win_ratio == 1.0 and
-                                self.pure_mcts_playout_num < 5000):
+                                self.pure_mcts_playout_num < 50000):
+                            print("update pure_mcts_playout_num ,best_win_ratio ")
                             self.pure_mcts_playout_num += 1000
                             self.best_win_ratio = 0.0
         except KeyboardInterrupt:
@@ -226,5 +227,5 @@ class TrainPipeline():
             self.data_buffer.extend(play_data)
 
 if __name__ == '__main__':
-    training_pipeline = TrainPipeline(init_model='./best_policy.model')
+    training_pipeline = TrainPipeline(init_model='./current_policy.model')
     training_pipeline.run15()
