@@ -737,7 +737,10 @@ extern "C"{
     void LocalSimulate(){
         //FILE *stream1;
         //freopen_s(&stream1, "out.txt", "w", stdout);
+        //加载模型
 
+
+        //蒙特卡洛
         while (1)
         {
             Black_Player();
