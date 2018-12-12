@@ -56,15 +56,20 @@ int main() {
     Tensor input_states(tensorflow::DT_FLOAT, shape);
     //  构造模型的输入，相当与python版本中的feed
     std::vector<std::pair<string, Tensor>> input;
-    auto input_states_map = input_states.tensor<float,5>();   //四维向量
+    auto input_states_map = input_states.tensor<float,4>();   //四维向量
 
-    for(int i =0; i< 4;i++){
+    for(int i =0; i< 3;i++){
         for(int j =0; j<15; j++){
             for(int k =0; k<15; k++){
-				input_states_map(0,j,k,i) = 0;
+				input_states_map(0,j,k,i) = 0.0f;
             }
         }
     }
+	for (int j = 0; j < 15; j++) {
+		for (int k = 0; k < 15; k++) {
+			input_states_map(0, j, k, 3) = 1.0f;
+		}
+	}
 	input.emplace_back(std::string("Placeholder"),input_states);
     //   运行模型，并获取输出
     std::vector<tensorflow::Tensor> answer;
@@ -72,9 +77,14 @@ int main() {
     status = session->Run(input, {"dense_2","dense"}, {}, &answer);
 
     Tensor result = answer[0];
-    auto result_map = result.tensor<int,1>();
-    cout<<"result: "<<result_map(0)<<endl;
-
+    auto result_map = result.tensor<int,2>();
+    cout<<"win_rate: "<<result_map(0,0)<<endl;
+	Tensor result = answer[1];
+	result_map = result.tensor<int, 2>();
+	for (int i = 0; i < 225; i++) {
+		cout << "probablity: " << result_map(0, i) << endl;
+	}
+	
     return 0;
 
 }
