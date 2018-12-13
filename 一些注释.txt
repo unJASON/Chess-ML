@@ -7,6 +7,13 @@ apt-get update
 apt-get install python3-pip
 
 可执行文件
-g++ -o test -I/usr/local/include/tf -I/usr/include/eigen3 TFversionTest.cpp -L/usr/local/lib -ltensorflow_cc
+g++ -o test -I/usr/local/include/tf -I/usr/local/include/tf/third_party/eigen3 -I/usr/local/include/tf/bazel-genfiles -std=c++11  TFversionTest.cpp -L/usr/local/lib -ltensorflow_cc
+
 so文件
 g++ -o TFversionlib.so -shared -I/usr/local/include/tf -I/usr/include/eigen3 -fPIC TFversionlib.cpp -std=c++11 -L/usr/local/lib -ltensorflow_cc
+
+
+tensorflow 1.10 
+1.bazel 0.18.0
+2.protobuf 3.6.0
+3.Eigen 3.3+
