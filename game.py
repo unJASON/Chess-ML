@@ -76,10 +76,10 @@ class Board(object):
                             self.last_move % self.height] = 1.0
         if len(self.states) % 2 == 0:
             square_state[3][:, :] = 1.0  # indicate the colour to play
-        # print(square_state[0, ::-1, :])
-        # print(square_state[1, ::-1, :])
-        # print(square_state[2, ::-1, :])
-        # print(square_state[3, ::-1, :])
+        # print(square_state[0, ::-1, :])   #当前的人所下的点
+        # print(square_state[1, ::-1, :])   #对手所下的点
+        # print(square_state[2, ::-1, :])   #最后一步落子
+        # print(square_state[3, ::-1, :])   #先后手
         return square_state[:, ::-1, :]
 
     def do_move(self, move):

@@ -1,4 +1,6 @@
-﻿watch -n 10 nvidia-smi #查询显卡使用情况
+﻿find / -name httpd.conf #查文件用的
+
+watch -n 10 nvidia-smi #查询显卡使用情况
 数据收集时候需要用到编译器
 g++ -o LocalPlay.so -shared -fPIC LocalPlay.cpp -std=c++11
 
@@ -7,13 +9,57 @@ apt-get update
 apt-get install python3-pip
 
 可执行文件
-g++ -o test -I/usr/local/include/tf -I/usr/local/include/tf/third_party/eigen3 -I/usr/local/include/tf/bazel-genfiles -std=c++11  TFversionTest.cpp -L/usr/local/lib -ltensorflow_cc
+g++ -o test -I/usr/local/include/tf/ -I/usr/local/include/tf/tensorflow/third_party -I/usr/local/include/tf/tensorflow/ -I/root/Chess-ML/c/eigen3/ -I/usr/local/include/tf/bazel-genfiles -std=c++11  TFsessionTest.cpp -L/usr/local/lib -ltensorflow_cc -ltensorflow_framework
 
 so文件
-g++ -o TFversionlib.so -shared -I/usr/local/include/tf -I/usr/include/eigen3 -fPIC TFversionlib.cpp -std=c++11 -L/usr/local/lib -ltensorflow_cc
+g++ -o TFversionlib.so -shared -I/usr/local/include/tf/ -I/usr/local/include/tf/tensorflow/third_party -I/usr/local/include/tf/tensorflow/ -I/root/Chess-ML/c/eigen3/ -I/usr/local/include/tf/bazel-genfiles -fPIC TFversionlib.cpp -std=c++11 -L/usr/local/lib -ltensorflow_cc -ltensorflow_framework
 
 
 tensorflow 1.10 
 1.bazel 0.18.0
 2.protobuf 3.6.0
 3.Eigen 3.3+
+
+
+#第一步：
+	#安装bazel
+	apt-get update	#更新源
+	sudo apt-get install pkg-config zip g++ zlib1g-dev unzip python #加载相关依赖
+	dpkg -i bazel_0.18.0-linux-x86_64.deb	#下载0.18.0后运行
+	
+	#安装protobuf
+	tar zxvf protobuf-all-3.6.0.tar.gz
+	cd protobuf-3.6.0/
+	./autogen.sh
+	./configure
+	make -j4
+	sudo make install
+	
+#第二步：
+	#编译tensorflow
+	tensorflow
+	tar -xf tensorflow-1.10.0.tar.gz	#解压tensorflow
+	cd tensorflow #到tensorflow下用bazel命令编译TensorFlow
+	bazel build :libtensorflow_cc.so
+	#编译其他依赖
+	sudo apt-get install autoconf automake libtool
+	cd ensorflow/contrib/makefile	
+	./build_all_linux.sh
+#第三步(可选,放入系统环境中)
+mkdir -p /usr/local/include/tf/tensorflow
+cp -r bazel-genfiles/ /usr/local/include/tf
+cp -r tensorflow/cc /usr/local/include/tf/tensorflow
+cp -r tensorflow/core /usr/local/include/tf/tensorflow
+cp -r third_party /usr/local/include/tf
+cp bazel-bin/tensorflow/libtensorflow_cc.so /usr/local/lib
+cp bazel-bin/tensorflow/libtensorflow_framework.so /usr/local/lib
+#可以开始测试了
+记得要依赖项目内部的eigen3
+
+
+
+
+
+
+
+

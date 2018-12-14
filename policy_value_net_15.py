@@ -114,6 +114,7 @@ class PolicyValueNet():
         input: a batch of states
         output: a batch of action probabilities and state values
         """
+
         log_act_probs, value = self.session.run(
                 [self.action_fc, self.evaluation_fc2],
                 feed_dict={self.input_states: state_batch}

@@ -7,7 +7,7 @@
 
 using namespace std;
 using namespace tensorflow;
-
+using namespace tensorflow::ops;
 int main() {
     const string pathToGraph = "./current_policy.model.meta";
     const string checkpointPath = "./current_policy.model";
@@ -47,12 +47,12 @@ int main() {
         throw runtime_error("Error loading checkpoint from " + checkpointPath + ": " + status.ToString());
     }
 
-    //dimention: 1*15*15*4,[batchsize,width,height,channel]
+    //dimention: 1*4*15*15,[batchsize,channel,width,height]
     tensorflow::TensorShape shape;
 	shape.InsertDim(0,1);
-	shape.InsertDim(1,15);
+	shape.InsertDim(1,4);
 	shape.InsertDim(2,15);
-	shape.InsertDim(3,4);
+	shape.InsertDim(3,15);
     Tensor input_states(tensorflow::DT_FLOAT, shape);
     //  构造模型的输入，相当与python版本中的feed
     std::vector<std::pair<string, Tensor>> input;
@@ -61,30 +61,29 @@ int main() {
     for(int i =0; i< 3;i++){
         for(int j =0; j<15; j++){
             for(int k =0; k<15; k++){
-				input_states_map(0,j,k,i) = 0.0f;
+				input_states_map(0,i,j,k) = 0.0f;
             }
         }
     }
 	for (int j = 0; j < 15; j++) {
 		for (int k = 0; k < 15; k++) {
-			input_states_map(0, j, k, 3) = 1.0f;
+			input_states_map(0, 3, j, k) = 1.0f;
 		}
 	}
-	input.emplace_back(std::string("Placeholder"),input_states);
-    //   运行模型，并获取输出
+	input.emplace_back(std::string("Placeholder:0"),input_states);
+	//   运行模型，并获取输出
     std::vector<tensorflow::Tensor> answer;
-	//dense_2: win_rate, dense:probablity
-    status = session->Run(input, {"dense_2","dense"}, {}, &answer);
-
+	//dense_2/Tanh:0: win_rate, dense/LogSoftmax:0: probablity of action
+    status = session->Run(input, {"dense_2/Tanh:0","dense/LogSoftmax:0"}, {}, &answer);
+	cout <<endl<<"answersize:"<< answer.size()<<endl;
     Tensor result = answer[0];
-    auto result_map = result.tensor<int,2>();
+    auto result_map = result.tensor<float,2>();
     cout<<"win_rate: "<<result_map(0,0)<<endl;
-	Tensor result = answer[1];
-	result_map = result.tensor<int, 2>();
+    Tensor result2 = answer[1];
+	auto result_map2 = result2.tensor<float, 2>();
 	for (int i = 0; i < 225; i++) {
-		cout << "probablity: " << result_map(0, i) << endl;
+		cout << "probablity: " << result_map2(0, i) << endl;
 	}
-	
     return 0;
 
 }
