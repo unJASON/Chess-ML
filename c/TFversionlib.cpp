@@ -1,17 +1,34 @@
 #include <iostream>
+#include <dlfcn.h>
 #include <ctime>
 #include <time.h>
 #include<random>
 #include<algorithm>
 #include <cstring>
+#include <fstream>
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/core/protobuf/meta_graph.pb.h"
 #include "tensorflow/cc/client/client_session.h"
 #include "tensorflow/cc/ops/standard_ops.h"
 #include "tensorflow/core/framework/tensor.h"
+#include <unistd.h>
+#include <windows.h>
 
 using namespace std;
 using namespace tensorflow::ops;
+
+
+//Model数据部分
+const string pathToGraph = "./current_policy.model.meta";
+const string checkpointPath = "./current_policy.model";
+//会话，数据流为全局变量
+tensorflow::Session *session = NULL;
+tensorflow::MetaGraphDef graph_def;
+//alphaZero参数
+float c_puct = 5;
+
+
+
 int board[15][15];
 int sec = 1000;
 const double RuningTime = 0.95f;
@@ -42,16 +59,15 @@ struct Node {
 	int turn;	//当前应当下棋的颜色
 	bool hasExpanded;	//是否已扩展
 	unsigned int success;
-	long levelScore;	//层级评分
-	long score;		//自身评分
+	float _Q, _U, Prior_p;//alphaZero需要用到的参数
+	float win_rate_leaf_temp;	//临时存放win_rate
 
-	Node(int c, int t, int x, int y, long scr, long level_Score, Node * p = nullptr) {
+	Node(int c, int t, int x, int y,float prior_p, Node * p = nullptr) {
 		parent = p;
 		color = c;
-
-		levelScore = level_Score;
-		score = scr;
-
+		_Q = 0;
+		_U = 0;
+		Prior_p = prior_p;	//action_Probablity
 		this->x = x;
 		this->y = y;
 		first = NULL;
@@ -72,16 +88,21 @@ int fy[4] = { -1, 0, -1, 1 };
 int tx[4] = { 0, 1, 1, 1 };
 int ty[4] = { 1, 0, 1, -1 };
 Node* root;	//root 指针
-   //扩展
+//扩展
 Node* expand(Node*);
-//模拟
-Node* simulate(Node*);
+
 
 //反向传播
 void packPropagation(Node*);
 
-//UCT公式
-double evaluate(Node *r);
+//UCT公式(alphaZero)
+float evaluate_value(Node *r) {
+	r->_U = (c_puct * (r->Prior_p)*sqrt(r->parent->N) / (1 + r->N));
+	return r->_Q + r->_U;
+};
+float update_node_vale(Node *r) {
+	r->_Q = r->_Q + 1.0*(r->win_rate_leaf_temp - r->_Q) / r->N;
+}
 //打印board
 void printBoard();
 //判断输赢，如果赢则返回颜色，如果未赢则返回0
@@ -131,35 +152,9 @@ int judge(int(*board)[15], int color, int x, int y) {
 	}
 	return 0;
 }
-//扩展 考虑扩展的时候返回的是否为终局节点
-Node * expand(Node* n) {
-	int c = 1;
-	if (n->color == 1) c = 2;
-	Node * u = euldVis(n);
-	if (u->isTerminated) {
-		n->newChild = u;
-		return n;
-	}
-	n->newChild = u;
-	//n->newChild = scoreBoard(n);
-
-	return n;
-}
-
-
-
-//Model数据部分
-const string pathToGraph = "./current_policy.model.meta";
-const string checkpointPath = "./current_policy.model";
-//会话，数据流为全局变量
-tensorflow::Session *session = NULL;
-tensorflow::MetaGraphDef graph_def;
-//alphaZero参数
-float c_puct = 5;
-
 
 //使用神经网络分析当前的probablity与action
-void evaluate(/*board*/) {
+std::vector<tensorflow::Tensor> model_evaluate(Node* n) {
 	// 读入预先训练好的模型的权重
 	tensorflow::Tensor checkpointPathTensor(tensorflow::DT_STRING, tensorflow::TensorShape());
 	checkpointPathTensor.scalar<std::string>()() = checkpointPath;
@@ -180,26 +175,16 @@ void evaluate(/*board*/) {
 	//  构造模型的输入，相当与python版本中的feed
 	std::vector<std::pair<string, tensorflow::Tensor>> input;
 	auto input_states_map = input_states.tensor<float, 4>();   //四维向量
-	/*输入数据*/
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 15; j++) {
-			for (int k = 0; k < 15; k++) {
-				input_states_map(0, i, j, k) = 0.0f;
-			}
-		}
-	}
-	for (int j = 0; j < 15; j++) {
-		for (int k = 0; k < 15; k++) {
-			input_states_map(0, 3, j, k) = 1.0f;
-		}
-	}
-	/*根据board转换得到*/
+	/*输入数据,解析board 与当前的n,根据board转换得到*/
+	
+	/**/
 
 	input.emplace_back(std::string("Placeholder:0"), input_states);
 	//   运行模型，并获取输出
 	std::vector<tensorflow::Tensor> answer;
 	//dense_2/Tanh:0: win_rate, dense/LogSoftmax:0: probablity of action
 	status = session->Run(input, { "dense_2/Tanh:0","dense/LogSoftmax:0" }, {}, &answer);
+	return answer;
 	/*cout << endl << "answersize:" << answer.size() << endl;
 	Tensor result = answer[0];
 	auto result_map = result.tensor<float, 2>();
@@ -233,7 +218,38 @@ void initSessionModel() {
 	}
 
 }
-
+//模拟
+Node * simulate_model(Node* n) {
+	++(n->N);
+	if (n->isTerminated) {
+		if (n->success == -1){
+			n->win_rate_leaf_temp = 0;
+		}else{
+			if (n->color == n->success) {
+				n->win_rate_leaf_temp = -1;
+			}
+			else {
+				n->win_rate_leaf_temp = 1;
+			}
+		}
+		
+		if (n->success == 1) {
+			++(n->QB);
+		}
+		else if (n->success == 2) {
+			++(n->QW);
+		}
+		return n;
+	}
+	int opp = n->color;
+	int own = 1;
+	if (n->color == 1) own = 2;
+	//对n做model的evaluate
+	std::vector<tensorflow::Tensor> answer = model_evaluate(n);
+	n->win_rate_leaf_temp = -answer[0].tensor<float, 2>()(0,0);
+	
+	return n;
+}
 Node * select(Node* n) {
 	int own = n->color;
 	int opp = 1;
@@ -241,6 +257,17 @@ Node * select(Node* n) {
 	++(n->N);
 	//出现终局直接返回
 	if (n->isTerminated) {
+		if (n->success == -1) {
+			n->win_rate_leaf_temp = 0;
+		}
+		else {
+			if (n->color == n->success) {
+				n->win_rate_leaf_temp = -1;
+			}
+			else {
+				n->win_rate_leaf_temp = 1;
+			}
+		}
 		if (n->success == 1) ++(n->QB);
 		else if (n->success == 2) ++(n->QW);
 		return n;
@@ -262,7 +289,7 @@ Node * select(Node* n) {
 	if (n->newChild == NULL) {
 		double minVal = -10e3;
 		for (Node * u = n->first; u; u = u->nxt) {
-			double valCh = evaluate(u);
+			double valCh = evaluate_value(u);
 			if (valCh > minVal) {
 				bestChild = u;
 				minVal = valCh;
@@ -277,16 +304,17 @@ Node * select(Node* n) {
 			board[x][y] = 0;
 		}
 
-	}
-	else if (n->newChild) {
+	}else if (n->newChild) {
 		bestChild = n->newChild;
 		n->newChild = bestChild->nxt;
 		bestChild->nxt = n->first;
 		n->first = bestChild;
-
-		leaf = simulate(bestChild);
-
+		//对该叶子节点做evaluate，获取胜利的可能性
+		leaf = simulate_model(bestChild);
+		//对本节点的leaf做win_rate更新
+		update_node_vale(leaf);
 	}
+	
 
 	//反向传播带回输赢
 	if (leaf->success == 1) {
@@ -295,6 +323,10 @@ Node * select(Node* n) {
 	else if (leaf->success == 2) {
 		++(n->QW);
 	}
+	//反向传播带回win_rate,每往上一层取反一次，更新本节点的n
+	leaf->win_rate_leaf_temp = -leaf->win_rate_leaf_temp;
+	n->win_rate_leaf_temp = leaf->win_rate_leaf_temp;
+	update_node_vale(n);
 	return leaf;
 }
 Node * euldVis(Node * n) {
@@ -313,7 +345,7 @@ Node * euldVis(Node * n) {
 			if (true) {
 				//先判断终局
 				if (judge(board, c, i, j) == c) {
-					Node *v = new Node(c, n->color, i, j, 1, 1, n);
+					Node *v = new Node(c, n->color, i, j, 1, n);
 					v->success = v->isTerminated = c;
 					v->nxt = nullptr;
 					v->hasExpanded = true;
@@ -323,12 +355,17 @@ Node * euldVis(Node * n) {
 		}
 	}
 
+	//使用model做evaluate,并获得剩余能下点的先验证success可能性,同时考虑到下完全部棋盘的可能
+	std::vector<tensorflow::Tensor> answer = model_evaluate(n);
+	//带了log 后面要去掉
+	auto act_probablity = answer[1].tensor<float, 2>();
+
 	//只要没下过就扩展
 	for (int i = 0; i < 15; ++i) {
 		for (int j = 0; j < 15; ++j) {
 			if (board[i][j]) continue;
 			if (true) {
-				u = new Node(c, n->color, i,j , ？,？, n);
+				u = new Node(c, n->color, i,j ,exp(act_probablity(0 ,i*15+j) ), n);
 				u->nxt = v;
 				v = u;
 			}
@@ -347,8 +384,6 @@ Node * expand(Node* n) {
 		return n;
 	}
 	n->newChild = u;
-	//n->newChild = scoreBoard(n);
-
 	return n;
 }
 //打印棋盘状态
@@ -382,28 +417,59 @@ int Black_Player() {
 	Node * leaf = nullptr;
 	int color = 2;
 	int turn = 1;
-	root = new Node(color, turn, x, y, -1, -1, nullptr);
+	root = new Node(color, turn, x, y, 1, nullptr);
 	for (;;) {
 		duration = (double)(clock() - timeStart) / CLOCKS_PER_SEC;
 		if (duration >= RuningTime) {
+			/*改成依概率选择*/
 			int maxVal = -1;
+			
+			while (true){
+				if (freopen("question.txt", "w", stdout) == NULL) {
+					sleep(5);//linux下睡5second
+				}else{
+					break;
+				}
+			}
+			
 			Node * v = nullptr;
+			std::cout << root->x << root->y << endl;
 			for (Node *u = root->first; u; u = u->nxt) {
 				if (maxVal < u->N) {
 					maxVal = u->N;
 					v = u;
 				}
+				if (u->nxt){
+					std::cout << u->x << "," << u->y << "," << u->N << "|";
+				}else{
+					std::cout << u->x << "," << u->y << "," << u->N;
+				}
+				
 			}
+			fclose(stdout);
+			//休息10S等待计算结果
+			//打开answer，8s一次直到成功为止，
+			//查看是否为自身序列号的答案，若为否再等10s.重复上述步骤
+			while (true) {
+				if (freopen("ans.txt", "r", stdin) == NULL) {
+					sleep(5);//linux下睡5second
+				}else {
+					break;
+				}
+			}
+			fclose(stdout);
+			cin >> v->x >> v->y;
 
 			if (v) {
-				cout << v->x << " " << v->y << " " << endl;
+				cout <<"simulationtimes:"<<v->N << " " << v->x << " " << v->y << " " << endl;
 				board[v->x][v->y] = v->color;
 				x = v->x;
 				y = v->y;
 				printBoard();
+				return 0;
 			}
 			else std::cout << "NULL PTR" << endl;
-			return 0;
+			return -1;
 		}
 		else {
 			//MCTS
@@ -414,36 +480,51 @@ int Black_Player() {
 
 //玩家2--白子
 int White_Player() {
-	//memset(board, 0, sizeof(board));
 	double duration = 0;	//运行时间
 	clock_t timeStart = clock();
 
 	Node * leaf = nullptr;
 	int color = 1;
 	int turn = 2;
-	root = new Node(color, turn, x, y, -1, -1, nullptr);
+	root = new Node(color, turn, x, y, 1, nullptr);
 
 	for (;;) {
 		duration = (double)(clock() - timeStart) / CLOCKS_PER_SEC;
 		if (duration >= RuningTime) {
 			int maxVal = -1;
 			Node * v = nullptr;
+
+			freopen("question.txt", "w", stdout);//写文件，并取值
+			std::cout << root->x << root->y << endl;
+			Node * v = nullptr;
 			for (Node *u = root->first; u; u = u->nxt) {
 				if (maxVal < u->N) {
 					maxVal = u->N;
 					v = u;
 				}
+				if (u->nxt) {
+					std::cout << u->x << "," << u->y << "," << u->N << "|";
+				}
+				else {
+					std::cout << u->x << "," << u->y << "," << u->N;
+				}
 			}
-
+			fclose(stdout);
+			//休息10S等待计算结果
+			//打开answer，8s一次直到成功为止，
+			//查看是否为自身序列号的答案，若为否再等10s.重复上述步骤
+			freopen("ans.txt", "r", stdin);
+			cin>>v -> x >>v ->y;
 			if (v) {
-				cout << v->x << " " << v->y << " " << endl;
+				cout << "simulationtimes:" << v->N << " " << v->x << " " << v->y << " " << endl;
 				board[v->x][v->y] = v->color;
 				x = v->x;
 				y = v->y;
 				printBoard();
+				return 0;
 			}
 			else std::cout << "NULL PTR" << endl;
-			return 0;
+			return -1;
 		}
 		else {
 			//MCTS
@@ -460,25 +541,27 @@ extern "C"{
 	void startSelfPlay() {
 		//初始化session并加载模型以后不用每次计算都初始化
 		initSessionModel();
-		
 		//蒙特卡洛
 		while (1)
 		{
-			Black_Player();
+			int result = Black_Player();
+			if (result == -1){
+				cout << "even" << endl;
+			}
 			if (judge(board, 1, x, y) == 1)
 			{
-				cout << "Congratulations to Black_Player！！！" << endl;
+				cout << "Congratulations to Black_Player" << endl;
 				break;
 			}
-			White_Player();
-			if (judge(board, 2, x, y) == 2)
-			{
-				cout << "Congratulations to White_Player！！！" << endl;
+			result = White_Player();
+			if (result == -1) {
+				cout << "even" << endl;
+			}
+			if (judge(board, 2, x, y) == 2){
+				cout << "Congratulations to White_Player" << endl;
 				break;
 			}
 		}
-
-		
 		//调用结束后关闭TensorFlow的会话
 		closeSessionModel();
 	}

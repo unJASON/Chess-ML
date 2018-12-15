@@ -79,11 +79,12 @@ int main() {
     Tensor result = answer[0];
     auto result_map = result.tensor<float,2>();
     cout<<"win_rate: "<<result_map(0,0)<<endl;
-    Tensor result2 = answer[1];
+	cout << "win_rate: " << answer[0].tensor<float, 2>()(0, 0) << endl;
+    /*Tensor result2 = answer[1];
 	auto result_map2 = result2.tensor<float, 2>();
 	for (int i = 0; i < 225; i++) {
 		cout << "probablity: " << result_map2(0, i) << endl;
-	}
+	}*/
     return 0;
 
 }
