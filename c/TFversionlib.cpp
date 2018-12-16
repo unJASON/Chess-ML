@@ -1,5 +1,4 @@
 #include <iostream>
-#include <dlfcn.h>
 #include <ctime>
 #include <time.h>
 #include<random>
@@ -12,7 +11,7 @@
 #include "tensorflow/cc/ops/standard_ops.h"
 #include "tensorflow/core/framework/tensor.h"
 #include <unistd.h>
-#include <windows.h>
+#include <fstream>
 
 using namespace std;
 using namespace tensorflow::ops;
@@ -176,7 +175,18 @@ std::vector<tensorflow::Tensor> model_evaluate(Node* n) {
 	std::vector<std::pair<string, tensorflow::Tensor>> input;
 	auto input_states_map = input_states.tensor<float, 4>();   //四维向量
 	/*输入数据,解析board 与当前的n,根据board转换得到*/
-	
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 15; j++) {
+			for (int k = 0; k < 15; k++) {
+				input_states_map(0, i, j, k) = 0.0f;
+			}
+		}
+	}
+	for (int j = 0; j < 15; j++) {
+		for (int k = 0; k < 15; k++) {
+			input_states_map(0, 3, j, k) = 1.0f;
+		}
+	}
 	/**/
 
 	input.emplace_back(std::string("Placeholder:0"), input_states);
@@ -421,50 +431,59 @@ int Black_Player() {
 	for (;;) {
 		duration = (double)(clock() - timeStart) / CLOCKS_PER_SEC;
 		if (duration >= RuningTime) {
+			cout << "black begin write";
 			/*改成依概率选择*/
-			int maxVal = -1;
-			
 			while (true){
-				if (freopen("question.txt", "w", stdout) == NULL) {
+				if (freopen("chess/question.txt", "w", stdout) == NULL) {
+					cout << "sleeping";
 					sleep(5);//linux下睡5second
 				}else{
 					break;
 				}
 			}
-			
 			Node * v = nullptr;
-			std::cout << root->x << root->y << endl;
+			std::cout << root->x<<","<< root->y<<","<<root->N << "\n";
 			for (Node *u = root->first; u; u = u->nxt) {
-				if (maxVal < u->N) {
-					maxVal = u->N;
-					v = u;
-				}
+				v = u;
 				if (u->nxt){
-					std::cout << u->x << "," << u->y << "," << u->N << "|";
+					std::cout<< u->x << "," << u->y << "," << u->N << "|";
 				}else{
-					std::cout << u->x << "," << u->y << "," << u->N;
+					std::cout<< u->x << "," << u->y << "," << u->N;
 				}
 				
 			}
 			fclose(stdout);
+			cout << "black end write";
 			//休息10S等待计算结果
 			//打开answer，8s一次直到成功为止，
 			//查看是否为自身序列号的答案，若为否再等10s.重复上述步骤
+			string ans = "chess/"+to_string(root->x) + "," + to_string(root->y)+","+to_string(root->N)+".txt";
 			while (true) {
-				if (freopen("ans.txt", "r", stdin) == NULL) {
+				fstream _file;
+				_file.open(ans, ios::in);
+				if (!_file){
+					cout << ans << "没有被创建";
+					sleep(5);//linux下睡5second
+					continue;
+				}
+				else{
+					_file.close();
+				}
+				if (freopen(ans.c_str(), "r", stdin) == NULL) {
 					sleep(5);//linux下睡5second
 				}else {
 					break;
 				}
 			}
-			fclose(stdout);
-			cin >> v->x >> v->y;
+			int temp = -1;
+			cin >> temp;
+			fclose(stdin);
 
 			if (v) {
-				cout <<"simulationtimes:"<<v->N << " " << v->x << " " << v->y << " " << endl;
-				board[v->x][v->y] = v->color;
-				x = v->x;
-				y = v->y;
+				cout <<"simulationtimes:"<<root->N << " " << temp/15 << " " << temp%15 << " " << endl;
+				board[temp / 15][temp % 15] = v->color;
+				x = temp / 15;
+				y = temp % 15;
 				printBoard();
 				return 0;
 			}
@@ -491,35 +510,61 @@ int White_Player() {
 	for (;;) {
 		duration = (double)(clock() - timeStart) / CLOCKS_PER_SEC;
 		if (duration >= RuningTime) {
-			int maxVal = -1;
-			Node * v = nullptr;
-
-			freopen("question.txt", "w", stdout);//写文件，并取值
-			std::cout << root->x << root->y << endl;
-			Node * v = nullptr;
-			for (Node *u = root->first; u; u = u->nxt) {
-				if (maxVal < u->N) {
-					maxVal = u->N;
-					v = u;
+			cout << "white begin write"<<endl;
+			/*改成依概率选择*/
+			while (true) {
+				if (freopen("chess/question.txt", "w", stdout) == NULL) {
+					sleep(5);//linux下睡5second
+				}else {
+					break;
 				}
+			}
+
+			Node * v = nullptr;
+			std::cout << root->x << "," << root->y << "," << root->N <<"\n";
+			for (Node *u = root->first; u; u = u->nxt) {
+				v = u;
 				if (u->nxt) {
 					std::cout << u->x << "," << u->y << "," << u->N << "|";
 				}
 				else {
 					std::cout << u->x << "," << u->y << "," << u->N;
 				}
+
 			}
 			fclose(stdout);
+			std::cout << "white end write";
 			//休息10S等待计算结果
 			//打开answer，8s一次直到成功为止，
 			//查看是否为自身序列号的答案，若为否再等10s.重复上述步骤
-			freopen("ans.txt", "r", stdin);
-			cin>>v -> x >>v ->y;
+			string ans = "chess/" + to_string(root->x) + "," + to_string(root->y) + "," + to_string(root->N) + ".txt";
+			while (true) {
+				fstream _file;
+				_file.open(ans, ios::in);
+				if (!_file) {
+					cout << ans << "没有被创建";
+					sleep(5);//linux下睡5second
+					continue;
+				}
+				else {
+					_file.close();
+				}
+				if (freopen(ans.c_str(), "r", stdin) == NULL) {
+					sleep(5);//linux下睡5second
+				}
+				else {
+					break;
+				}
+			}
+			int temp = -1;
+			cin >> temp;
+			fclose(stdin);
+
 			if (v) {
-				cout << "simulationtimes:" << v->N << " " << v->x << " " << v->y << " " << endl;
-				board[v->x][v->y] = v->color;
-				x = v->x;
-				y = v->y;
+				cout << "simulationtimes:" << root->N << " " << temp / 15 << " " << temp % 15 << " " << endl;
+				board[temp / 15][temp % 15] = v->color;
+				x = temp / 15;
+				y = temp % 15;
 				printBoard();
 				return 0;
 			}
@@ -530,6 +575,7 @@ int White_Player() {
 			//MCTS
 			leaf = select(root);
 		}
+		
 	}
 }
 
@@ -543,7 +589,7 @@ extern "C"{
 		initSessionModel();
 		//蒙特卡洛
 		while (1)
-		{
+		{	
 			int result = Black_Player();
 			if (result == -1){
 				cout << "even" << endl;
